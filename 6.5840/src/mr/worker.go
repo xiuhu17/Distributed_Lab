@@ -122,6 +122,21 @@ func (task *Task) Map_Task(mapf func(string, string) []KeyValue) {
 
 }
 
+// ask the coordinate for the reduce task
+// do the reduce task
+func (task *Task) Reduce_Task(reducef func(string, []string) string) {
+	request := Request_Reduce_Task{}
+	reply := Reply_Reduce_Task{}
+	finished := call("Coordinator.RPC_Reduce_task", &request, &reply)
+	if !finished {
+		logger.Debug(logger.DLog, "Seems the coordinator has finished")
+		return
+	}
+	task.index = reply.index
+
+	
+}
+
 // example function to show how to make an RPC call to the coordinator.
 //
 // the RPC argument and reply types are defined in rpc.go.
@@ -147,12 +162,6 @@ func CallExample() {
 	} else {
 		fmt.Printf("call failed!\n")
 	}
-}
-
-// ask the coordinate for the reduce task
-// do the reduce task
-func (task *Task) Reduce_Task(mapf func(string, string) []KeyValue) {
-
 }
 
 // send an RPC request to the coordinator, wait for the response.
