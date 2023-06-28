@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
@@ -10,6 +11,14 @@ import (
 
 	"6.5840/logger"
 )
+
+// for sorting by key.
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 type State int
 
@@ -54,7 +63,7 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 	reply := Reply_Start_Task{}
 	finished := call("Coordinator.PRC_Start_Task", &request, &reply)
 	if !finished {
-		logger.Debug(logger.DRtrn, "Seems the coordinator has finished")
+		logger.Debug(logger.DLog, "Seems the coordinator has finished")
 		return
 	}
 	task.nMap = reply.nMap
@@ -87,9 +96,29 @@ func (task *Task) Map_Task(mapf func(string, string) []KeyValue) {
 	}
 	file.Close()
 
-	// get the output
 	kva := mapf(task.file, string(content))
-	
+
+	temp_files := make([]string, task.nReduce)
+	hash_json := make([]*json.Encoder, task.nReduce)
+	var fd *os.File
+	for i := 0; i < task.nReduce; i += 1 {
+		temp_files[i] = fmt.Sprintf("mr-%d-%d", task.index, i)
+		path, _ := os.Getwd()
+		fd, err = ioutil.TempFile(path, temp_files[i])
+		if err != nil {
+			logger.Debug(logger.DLog, "File can not be encoded to json")
+		}
+		enc := json.NewEncoder(fd)
+		hash_json[i] = enc
+	}
+
+	for _, kv := range kva {
+		enc := hash_json[(ihash(kv.Key) % task.nReduce)]
+		err := enc.Encode(&kv)
+		if err != nil {
+			logger.Debug(logger.DLog, "Can not write into json file")
+		}
+	}
 
 }
 
@@ -118,6 +147,12 @@ func CallExample() {
 	} else {
 		fmt.Printf("call failed!\n")
 	}
+}
+
+// ask the coordinate for the reduce task
+// do the reduce task
+func (task *Task) Reduce_Task(mapf func(string, string) []KeyValue) {
+
 }
 
 // send an RPC request to the coordinator, wait for the response.
