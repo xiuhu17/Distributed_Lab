@@ -3,9 +3,20 @@ package mr
 import (
 	"fmt"
 	"hash/fnv"
+	"io/ioutil"
 	"log"
 	"net/rpc"
-	"time"
+	"os"
+
+	"6.5840/logger"
+)
+
+type State int
+
+const (
+	idle State = iota
+	progress
+	completed
 )
 
 // Map functions return a slice of KeyValue.
@@ -14,17 +25,12 @@ type KeyValue struct {
 	Value string
 }
 
-type Machine struct {
-	state      State
-	start_time time.Time
-}
-
-type MapMachine struct {
-	Machine
-}
-
-type ReduceMachine struct {
-	Machine
+type Task struct {
+	state   State
+	nReduce int
+	nMap    int
+	index   int
+	file    string
 }
 
 // use ihash(key) % NReduce to choose the reduce
@@ -35,27 +41,55 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-// main/mrworker.go -> plugin -> eg: mrapps/wc.go -> Map & Reduce -> mapf & reducef -> Worker(mapf, reducef)
+// main/mrworker.go -> plugin -> eg: mrapps/wc.go -> Map & Reduce -> mapf & reducef -> mr/worker.go -> Worker(mapf, reducef)
+// main/mrcoordinator.go 															-> mr/coordinator.go -> Makecoordinator(files []string, nReduce int)
+// call(rpcname string, args interface{}, reply interface{}) bool 调用rpc
+// call(rpcname string, args interface{}, reply interface{}) bool 判断coordinator是否结束
 func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 
 	// Your worker implementation here.
+	// Init the task
+	task := Task{}
+	request := Request_Start_Task{}
+	reply := Reply_Start_Task{}
+	finished := call("Coordinator.PRC_Start_Task", &request, &reply)
+	if !finished {
+		logger.Debug(logger.DRtrn, "Seems the coordinator has finished")
+		return
+	}
+	task.nMap = reply.nMap
+	task.nReduce = reply.nRecude
+	task.state = idle
 
-	// uncomment to send the Example RPC to the coordinator.
+}
 
-	// intermediate := []mr.KeyValue{}
-	// for _, filename := range os.Args[2:] {
-	// 	file, err := os.Open(filename)
-	// 	if err != nil {
-	// 		log.Fatalf("cannot open %v", filename)
-	// 	}
-	// 	content, err := ioutil.ReadAll(file)
-	// 	if err != nil {
-	// 		log.Fatalf("cannot read %v", filename)
-	// 	}
-	// 	file.Close()
-	// 	kva := mapf(filename, string(content))
-	// 	intermediate = append(intermediate, kva...)
-	// }
+// ask the coordinate for the map task
+// do the map task
+func (task *Task) Map_Task(mapf func(string, string) []KeyValue) {
+	request := Request_Map_Task{}
+	reply := Reply_Map_Task{}
+	finished := call("Coordinator.RPC_Map_task", &request, &reply)
+	if !finished {
+		logger.Debug(logger.DLog, "Seems the coordinator has finished")
+		return
+	}
+	task.file = reply.file
+	task.index = reply.index
+
+	// read the file
+	file, err := os.Open(task.file)
+	if err != nil {
+		logger.Debug(logger.DLog, "File can not be opened")
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		logger.Debug(logger.DLog, "File can not be read")
+	}
+	file.Close()
+
+	// get the output
+	kva := mapf(task.file, string(content))
+	
 
 }
 

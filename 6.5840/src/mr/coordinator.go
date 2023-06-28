@@ -8,24 +8,11 @@ import (
 	"os"
 )
 
-type State int
-
-const (
-	idle State = iota
-	progress
-	completed
-)
-
 type Coordinator struct {
 	// Your definitions here.
-	state       State
-	map_cap     int
-	reduce_cap  int
-	map_cnt     int
-	reduce_cnt  int
-	idle_q      []int
-	progress_q  []int
-	completed_q []int
+	state   State
+	nReduce int
+	nMap    int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -54,6 +41,7 @@ func (c *Coordinator) server() {
 
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
+// 让 main/mrcoordinator.go 退出
 func (c *Coordinator) Done() bool {
 	ret := false
 
@@ -69,7 +57,19 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 
 	// Your code here.
+	c.state = progress
+	c.nMap = len(files)
+	c.nReduce = nReduce
 
 	c.server()
 	return &c
+}
+
+func (c *Coordinator) PRC_Start_Task(request *Request_Start_Task, reply *Reply_Start_Task) {
+	reply.nMap = c.nMap
+	reply.nRecude = c.nReduce
+}
+
+func (c *Coordinator) RPC_Map_task(request *Request_Map_Task, reply *Reply_Map_Task) {
+	// ask the coordinate for the file and the index
 }

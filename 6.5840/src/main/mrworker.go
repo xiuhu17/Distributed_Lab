@@ -10,11 +10,22 @@ package main
 // Please do not change this file.
 //
 
-import "6.5840/mr"
-import "plugin"
-import "os"
-import "fmt"
-import "log"
+import (
+	"fmt"
+	"log"
+	"os"
+	"plugin"
+
+	"6.5840/mr"
+)
+
+// for sorting by key.
+type ByKey []mr.KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
 func main() {
 	if len(os.Args) != 2 {
