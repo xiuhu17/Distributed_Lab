@@ -8,9 +8,12 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"sort"
 
 	"6.5840/logger"
 )
+
+// idle --gettask--> progress --taskdone--> idle
 
 // for sorting by key.
 type ByKey []KeyValue
@@ -26,6 +29,13 @@ const (
 	idle State = iota
 	progress
 	completed
+)
+
+type Type int
+
+const (
+	MAP    Type = iota
+	REDUCE Type = iota
 )
 
 // Map functions return a slice of KeyValue.
@@ -75,12 +85,15 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 // ask the coordinate for the map task
 // do the map task
 func (task *Task) Map_Task(mapf func(string, string) []KeyValue) {
+	// set state
+	task.state = progress
+
+	// request the info from coordinator
 	request := Request_Map_Task{}
 	reply := Reply_Map_Task{}
-	finished := call("Coordinator.RPC_Map_task", &request, &reply)
+	finished := call("Coordinator.RPC_Map_Task", &request, &reply)
 	if !finished {
 		logger.Debug(logger.DLog, "Seems the coordinator has finished")
-		return
 	}
 	task.file = reply.file
 	task.index = reply.index
@@ -95,23 +108,20 @@ func (task *Task) Map_Task(mapf func(string, string) []KeyValue) {
 		logger.Debug(logger.DLog, "File can not be read")
 	}
 	file.Close()
-
 	kva := mapf(task.file, string(content))
 
+	// temp files created and write into them
 	temp_files := make([]string, task.nReduce)
 	hash_json := make([]*json.Encoder, task.nReduce)
-	var fd *os.File
 	for i := 0; i < task.nReduce; i += 1 {
 		temp_files[i] = fmt.Sprintf("mr-%d-%d", task.index, i)
-		path, _ := os.Getwd()
-		fd, err = ioutil.TempFile(path, temp_files[i])
+		fd, err := ioutil.TempFile(".", temp_files[i])
 		if err != nil {
 			logger.Debug(logger.DLog, "File can not be encoded to json")
 		}
 		enc := json.NewEncoder(fd)
 		hash_json[i] = enc
 	}
-
 	for _, kv := range kva {
 		enc := hash_json[(ihash(kv.Key) % task.nReduce)]
 		err := enc.Encode(&kv)
@@ -120,21 +130,86 @@ func (task *Task) Map_Task(mapf func(string, string) []KeyValue) {
 		}
 	}
 
+	// rename the file
+	for i, temp_file := range temp_files {
+		os.Rename(temp_file, fmt.Sprintf("mr-%d-%d", task.index, i))
+	}
+
+	// set state
+	task.state = idle
 }
 
 // ask the coordinate for the reduce task
 // do the reduce task
 func (task *Task) Reduce_Task(reducef func(string, []string) string) {
+	// set state
+	task.state = progress
+
+	// request the info from coordinator
 	request := Request_Reduce_Task{}
 	reply := Reply_Reduce_Task{}
-	finished := call("Coordinator.RPC_Reduce_task", &request, &reply)
+	finished := call("Coordinator.RPC_Reduce_Task", &request, &reply)
 	if !finished {
 		logger.Debug(logger.DLog, "Seems the coordinator has finished")
-		return
 	}
 	task.index = reply.index
 
-	
+	// read all files
+	kva := []KeyValue{}
+	for i := 0; i < task.nMap; i += 1 {
+		file, err := os.Open(fmt.Sprintf("mr-%d-%d", i, task.index))
+		if err != nil {
+			logger.Debug(logger.DLog, "File can not be opened")
+		}
+		dec := json.NewDecoder(file)
+		for {
+			var kv KeyValue
+			if err := dec.Decode(&kv); err != nil {
+				break
+			}
+			kva = append(kva, kv)
+		}
+		file.Close()
+	}
+
+	// temp final file created and write into it
+	temp_file := fmt.Sprintf("mr-out-%d", task.index)
+	fd, err := ioutil.TempFile(".", temp_file)
+	if err != nil {
+		logger.Debug(logger.DLog, "File can not be encoded to json")
+	}
+
+	// sort the kva, and deal with the data
+	sort.Sort(ByKey(kva))
+	for i := 0; i < len(kva); {
+		j := i + 1
+		for j < len(kva) && kva[j].Key == kva[i].Key {
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, kva[k].Value)
+		}
+		output := reducef(kva[i].Key, values)
+		fmt.Fprintf(fd, "%v %v\n", kva[i].Key, output)
+		i = j
+	}
+
+	// rename the file
+	os.Rename(temp_file, fmt.Sprintf("mr-out-%d", task.index))
+
+	// set state
+	task.state = idle
+}
+
+// indicate which kind of task has done
+func (task *Task) Task_Done(tp Type) {
+	request := Request_Task_Done{tp: tp, ts: task}
+	reply := Reply_Task_Done{}
+	finished := call("Coordinator.RPC_Task_Done", &request, &reply)
+	if !finished {
+		logger.Debug(logger.DLog, "Seems the coordinator has finished")
+	}
 }
 
 // example function to show how to make an RPC call to the coordinator.

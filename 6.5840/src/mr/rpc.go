@@ -49,6 +49,14 @@ type Reply_Reduce_Task struct {
 	index int
 }
 
+type Request_Task_Done struct {
+	tp Type
+	ts *Task
+}
+
+type Reply_Task_Done struct {
+}
+
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.
 // Can't use the current directory since

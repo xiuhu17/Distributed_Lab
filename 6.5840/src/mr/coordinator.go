@@ -70,10 +70,11 @@ func (c *Coordinator) PRC_Start_Task(request *Request_Start_Task, reply *Reply_S
 	reply.nRecude = c.nReduce
 }
 
-func (c *Coordinator) RPC_Map_task(request *Request_Map_Task, reply *Reply_Map_Task) {
-	// ask the coordinate for the file and the index
+func (c *Coordinator) RPC_Map_Task(request *Request_Map_Task, reply *Reply_Map_Task) {
 }
 
-func (c *Coordinator) RPC_Reduce_task(request *Request_Map_Task, reply *Reply_Map_Task) {
-	// ask the coordinate for the file and the index
+func (c *Coordinator) RPC_Reduce_Task(request *Request_Map_Task, reply *Reply_Map_Task) {
+}
+
+func (c *Coordinator) RPC_Task_Done(request *Request_Map_Task, reply *Reply_Map_Task) {
 }
