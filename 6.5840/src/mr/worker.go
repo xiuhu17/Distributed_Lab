@@ -34,8 +34,8 @@ const (
 type Type int
 
 const (
-	MAP    Type = iota
-	REDUCE Type = iota
+	MAP Type = iota
+	REDUCE
 )
 
 // Map functions return a slice of KeyValue.
@@ -65,10 +65,12 @@ func ihash(key string) int {
 // call(rpcname string, args interface{}, reply interface{}) bool 调用rpc
 // call(rpcname string, args interface{}, reply interface{}) bool 判断coordinator是否结束
 func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
-
-	// Your worker implementation here.
 	// Init the task
 	task := Task{}
+	task.Start_Task()
+}
+
+func (task *Task) Start_Task() {
 	request := Request_Start_Task{}
 	reply := Reply_Start_Task{}
 	finished := call("Coordinator.PRC_Start_Task", &request, &reply)
@@ -79,25 +81,32 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 	task.nMap = reply.nMap
 	task.nReduce = reply.nRecude
 	task.state = idle
-
 }
 
-// ask the coordinate for the map task
-// do the map task
-func (task *Task) Map_Task(mapf func(string, string) []KeyValue) {
+func (task *Task) Ask_Task() {
 	// set state
 	task.state = progress
 
 	// request the info from coordinator
-	request := Request_Map_Task{}
-	reply := Reply_Map_Task{}
-	finished := call("Coordinator.RPC_Map_Task", &request, &reply)
+	request := Request_Ask_Task{}
+	reply := Reply_Ask_Task{}
+	finished := call("Coordinator.RPC_Ask_Task", &request, &reply)
 	if !finished {
 		logger.Debug(logger.DLog, "Seems the coordinator has finished")
 	}
-	task.file = reply.file
-	task.index = reply.index
 
+	// different task type
+	if reply.tp == MAP {
+		task.file = reply.file
+		task.index = reply.index
+	} else if reply.tp == REDUCE {
+		task.index = reply.index
+	}
+}
+
+// ask the coordinate for the map task
+// do the map task
+func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 	// read the file
 	file, err := os.Open(task.file)
 	if err != nil {
@@ -141,19 +150,7 @@ func (task *Task) Map_Task(mapf func(string, string) []KeyValue) {
 
 // ask the coordinate for the reduce task
 // do the reduce task
-func (task *Task) Reduce_Task(reducef func(string, []string) string) {
-	// set state
-	task.state = progress
-
-	// request the info from coordinator
-	request := Request_Reduce_Task{}
-	reply := Reply_Reduce_Task{}
-	finished := call("Coordinator.RPC_Reduce_Task", &request, &reply)
-	if !finished {
-		logger.Debug(logger.DLog, "Seems the coordinator has finished")
-	}
-	task.index = reply.index
-
+func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 	// read all files
 	kva := []KeyValue{}
 	for i := 0; i < task.nMap; i += 1 {

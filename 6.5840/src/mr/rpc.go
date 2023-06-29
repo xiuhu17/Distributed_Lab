@@ -34,18 +34,12 @@ type Reply_Start_Task struct {
 	nRecude int
 }
 
-type Request_Map_Task struct {
+type Request_Ask_Task struct {
 }
 
-type Reply_Map_Task struct {
+type Reply_Ask_Task struct {
+	tp    Type
 	file  string
-	index int
-}
-
-type Request_Reduce_Task struct {
-}
-
-type Reply_Reduce_Task struct {
 	index int
 }
 

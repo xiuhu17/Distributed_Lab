@@ -13,6 +13,19 @@ type Coordinator struct {
 	state   State
 	nReduce int
 	nMap    int
+	files   []string
+
+	// files[idx] = file_name
+	map_allocated map[int]bool // idx ----> which allocated
+	map_done      map[int]bool // idx ----> which done
+
+	// not start until
+	reduce_allocated map[int]bool
+	reduce_done      map[int]bool
+
+	// channel for accepting data
+	handle_allocate chan interface{}
+	handle_done     chan interface{}
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -70,11 +83,12 @@ func (c *Coordinator) PRC_Start_Task(request *Request_Start_Task, reply *Reply_S
 	reply.nRecude = c.nReduce
 }
 
-func (c *Coordinator) RPC_Map_Task(request *Request_Map_Task, reply *Reply_Map_Task) {
+func (c *Coordinator) RPC_Ask_Task(request *Request_Ask_Task, reply *Reply_Ask_Task) {
 }
 
-func (c *Coordinator) RPC_Reduce_Task(request *Request_Map_Task, reply *Reply_Map_Task) {
+func (c *Coordinator) RPC_Task_Done(request *Request_Task_Done, reply *Reply_Task_Done) {
 }
 
-func (c *Coordinator) RPC_Task_Done(request *Request_Map_Task, reply *Reply_Map_Task) {
+func (c *Coordinator) loop() {
+
 }
