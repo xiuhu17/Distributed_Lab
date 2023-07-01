@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"time"
 )
 
 type Coordinator struct {
@@ -16,16 +17,21 @@ type Coordinator struct {
 	files   []string
 
 	// files[idx] = file_name
+	// index to work
 	map_allocated map[int]bool // idx ----> which allocated
 	map_done      map[int]bool // idx ----> which done
 
-	// not start until
+	// index to work
 	reduce_allocated map[int]bool
 	reduce_done      map[int]bool
 
+	// task to last heartbeat time
+	task_time map[*Task]time.Time
+
 	// channel for accepting data
-	handle_allocate chan interface{}
-	handle_done     chan interface{}
+	handle_ask       chan *Request_Ask_Task
+	handle_done      chan *Request_Done_Task
+	handle_heartbeat chan interface{}
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -69,10 +75,18 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 
-	// Your code here.
-	c.state = progress
-	c.nMap = len(files)
+	// initiate the server
+	c.files = append([]string(nil), files...)
 	c.nReduce = nReduce
+	c.nMap = len(files)
+	c.map_allocated = make(map[int]bool)
+	c.map_done = make(map[int]bool)
+	c.reduce_allocated = make(map[int]bool)
+	c.reduce_done = make(map[int]bool)
+	c.task_time = make(map[*Task]time.Time)
+	c.handle_ask = make(chan *Request_Ask_Task)
+	c.handle_done = make(chan *Request_Done_Task)
+	c.handle_heartbeat = make(chan interface{})
 
 	c.server()
 	return &c
@@ -84,11 +98,23 @@ func (c *Coordinator) PRC_Start_Task(request *Request_Start_Task, reply *Reply_S
 }
 
 func (c *Coordinator) RPC_Ask_Task(request *Request_Ask_Task, reply *Reply_Ask_Task) {
+	c.handle_ask <- request
 }
 
-func (c *Coordinator) RPC_Task_Done(request *Request_Task_Done, reply *Reply_Task_Done) {
+func (c *Coordinator) RPC_Done_Task(request *Request_Done_Task, reply *Reply_Done_Task) {
+	c.handle_done <- request
 }
 
 func (c *Coordinator) loop() {
+	for {
+		select {
+		case request := <-c.handle_ask:
+
+		}
+	}
+}
+
+// the loop will call this function to assign task: 1 MAP 2 REDUCE
+func (c *Coordinator) assign_task(ts *Task) {
 
 }

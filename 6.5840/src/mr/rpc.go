@@ -35,20 +35,19 @@ type Reply_Start_Task struct {
 }
 
 type Request_Ask_Task struct {
-}
-
-type Reply_Ask_Task struct {
-	tp    Type
-	file  string
-	index int
-}
-
-type Request_Task_Done struct {
 	tp Type
 	ts *Task
 }
 
-type Reply_Task_Done struct {
+type Reply_Ask_Task struct {
+}
+
+type Request_Done_Task struct {
+	tp Type
+	ts *Task
+}
+
+type Reply_Done_Task struct {
 }
 
 // Cook up a unique-ish UNIX-domain socket name

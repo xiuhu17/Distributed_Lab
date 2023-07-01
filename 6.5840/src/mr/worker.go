@@ -94,14 +94,6 @@ func (task *Task) Ask_Task() {
 	if !finished {
 		logger.Debug(logger.DLog, "Seems the coordinator has finished")
 	}
-
-	// different task type
-	if reply.tp == MAP {
-		task.file = reply.file
-		task.index = reply.index
-	} else if reply.tp == REDUCE {
-		task.index = reply.index
-	}
 }
 
 // ask the coordinate for the map task
@@ -200,10 +192,10 @@ func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 }
 
 // indicate which kind of task has done
-func (task *Task) Task_Done(tp Type) {
-	request := Request_Task_Done{tp: tp, ts: task}
-	reply := Reply_Task_Done{}
-	finished := call("Coordinator.RPC_Task_Done", &request, &reply)
+func (task *Task) Done_Task(tp Type) {
+	request := Request_Done_Task{tp: tp, ts: task}
+	reply := Reply_Done_Task{}
+	finished := call("Coordinator.RPC_Done_Task", &request, &reply)
 	if !finished {
 		logger.Debug(logger.DLog, "Seems the coordinator has finished")
 	}
