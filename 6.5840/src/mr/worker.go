@@ -28,7 +28,6 @@ type State int
 const (
 	idle State = iota
 	progress
-	completed
 )
 
 type Type int
@@ -46,6 +45,7 @@ type KeyValue struct {
 
 type Task struct {
 	state   State
+	tp      Type
 	nReduce int
 	nMap    int
 	index   int
@@ -80,19 +80,23 @@ func (task *Task) Start_Task() {
 	}
 	task.nMap = reply.nMap
 	task.nReduce = reply.nRecude
-	task.state = idle
 }
 
 func (task *Task) Ask_Task() {
-	// set state
-	task.state = progress
-
 	// request the info from coordinator
-	request := Request_Ask_Task{}
+	request := Request_Ask_Task{ts: task}
 	reply := Reply_Ask_Task{}
 	finished := call("Coordinator.RPC_Ask_Task", &request, &reply)
 	if !finished {
 		logger.Debug(logger.DLog, "Seems the coordinator has finished")
+	}
+
+	// assign the reply
+	task.tp = reply.tp
+	task.index = reply.index
+	task.state = reply.state
+	if reply.tp == MAP {
+		task.file = reply.file
 	}
 }
 
@@ -133,11 +137,15 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 
 	// rename the file
 	for i, temp_file := range temp_files {
-		os.Rename(temp_file, fmt.Sprintf("mr-%d-%d", task.index, i))
+		useName := fmt.Sprintf("mr-%d-%d", task.index, i)
+		if _, err := os.Stat(useName); err == nil { // exists
+			continue
+		} else if os.IsNotExist(err) {
+			os.Rename(temp_file, useName)
+		} else {
+			logger.Debug(logger.DLog, "Problem with renaming the file")
+		}
 	}
-
-	// set state
-	task.state = idle
 }
 
 // ask the coordinate for the reduce task
@@ -185,15 +193,19 @@ func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 	}
 
 	// rename the file
-	os.Rename(temp_file, fmt.Sprintf("mr-out-%d", task.index))
-
-	// set state
-	task.state = idle
+	useName := fmt.Sprintf("mr-out-%d", task.index)
+	if _, err := os.Stat(useName); err == nil { // exists
+		return
+	} else if os.IsNotExist(err) {
+		os.Rename(temp_file, useName)
+	} else {
+		logger.Debug(logger.DLog, "Problem with renaming the file")
+	}
 }
 
 // indicate which kind of task has done
 func (task *Task) Done_Task(tp Type) {
-	request := Request_Done_Task{tp: tp, ts: task}
+	request := Request_Done_Task{ts: task}
 	reply := Reply_Done_Task{}
 	finished := call("Coordinator.RPC_Done_Task", &request, &reply)
 	if !finished {

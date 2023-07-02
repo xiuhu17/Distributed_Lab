@@ -35,19 +35,34 @@ type Reply_Start_Task struct {
 }
 
 type Request_Ask_Task struct {
-	tp Type
 	ts *Task
 }
 
 type Reply_Ask_Task struct {
+	tp    Type
+	state State
+	index int
+	file  string
+}
+
+type Wrap_Ask struct {
+	req *Request_Ask_Task
+	rep *Reply_Ask_Task
+	tmp chan struct{}
 }
 
 type Request_Done_Task struct {
-	tp Type
 	ts *Task
 }
 
 type Reply_Done_Task struct {
+	state State
+}
+
+type Wrap_Done struct {
+	req *Request_Done_Task
+	rep *Reply_Done_Task
+	tmp chan struct{}
 }
 
 // Cook up a unique-ish UNIX-domain socket name

@@ -11,26 +11,25 @@ import (
 
 type Coordinator struct {
 	// Your definitions here.
-	state   State
 	nReduce int
 	nMap    int
 	files   []string
 
 	// files[idx] = file_name
-	// index to work
-	map_allocated map[int]bool // idx ----> which allocated
-	map_done      map[int]bool // idx ----> which done
+	// index to task
+	map_allocated map[int]*Task // idx ----> which task allocated
+	map_done      map[int]*Task // idx ----> which task done
 
 	// index to work
-	reduce_allocated map[int]bool
-	reduce_done      map[int]bool
+	reduce_allocated map[int]*Task
+	reduce_done      map[int]*Task
 
 	// task to last heartbeat time
 	task_time map[*Task]time.Time
 
 	// channel for accepting data
-	handle_ask       chan *Request_Ask_Task
-	handle_done      chan *Request_Done_Task
+	ask_chan         chan *Wrap_Ask
+	done_chan        chan *Wrap_Done
 	handle_heartbeat chan interface{}
 }
 
@@ -79,13 +78,13 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.files = append([]string(nil), files...)
 	c.nReduce = nReduce
 	c.nMap = len(files)
-	c.map_allocated = make(map[int]bool)
-	c.map_done = make(map[int]bool)
-	c.reduce_allocated = make(map[int]bool)
-	c.reduce_done = make(map[int]bool)
+	c.map_allocated = make(map[int]*Task)
+	c.map_done = make(map[int]*Task)
+	c.reduce_allocated = make(map[int]*Task)
+	c.reduce_done = make(map[int]*Task)
 	c.task_time = make(map[*Task]time.Time)
-	c.handle_ask = make(chan *Request_Ask_Task)
-	c.handle_done = make(chan *Request_Done_Task)
+	c.ask_chan = make(chan *Wrap_Ask)
+	c.done_chan = make(chan *Wrap_Done)
 	c.handle_heartbeat = make(chan interface{})
 
 	c.server()
@@ -98,23 +97,90 @@ func (c *Coordinator) PRC_Start_Task(request *Request_Start_Task, reply *Reply_S
 }
 
 func (c *Coordinator) RPC_Ask_Task(request *Request_Ask_Task, reply *Reply_Ask_Task) {
-	c.handle_ask <- request
+	wrp := Wrap_Ask{req: request, rep: reply, tmp: make(chan struct{})}
+	c.ask_chan <- (&wrp)
+	<-wrp.tmp
 }
 
 func (c *Coordinator) RPC_Done_Task(request *Request_Done_Task, reply *Reply_Done_Task) {
-	c.handle_done <- request
+	wrp := Wrap_Done{req: request, rep: reply, tmp: make(chan struct{})}
+	c.done_chan <- (&wrp)
+	<-wrp.tmp
 }
 
 func (c *Coordinator) loop() {
 	for {
 		select {
-		case request := <-c.handle_ask:
-
+		case wrp := <-c.ask_chan:
+			c.handle_ask_chan(wrp)
+		case wrp := <-c.done_chan:
+			c.handle_done_chan(wrp)
 		}
 	}
 }
 
 // the loop will call this function to assign task: 1 MAP 2 REDUCE
-func (c *Coordinator) assign_task(ts *Task) {
+func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
+	// if the map has not been finished ---> start for map allocation
+	if len(c.map_done) != c.nMap {
+		for i, _ := range c.files {
+			if c.map_allocated[i] == nil && c.map_done[i] == nil {
+				c.map_allocated[i] = wrp.req.ts
+				go func(i int) {
+					wrp.rep.state = progress
+					wrp.rep.tp = MAP
+					wrp.rep.index = i
+					wrp.rep.file = c.files[i]
+					<-wrp.tmp
+				}(i)
+				break
+			}
+		}
+	} else { // for reduce
+		for i := 0; i < c.nReduce; i += 1 {
+			if c.reduce_allocated[i] == nil && c.reduce_done[i] == nil {
+				c.reduce_allocated[i] = wrp.req.ts
+				go func(i int) {
+					wrp.rep.state = progress
+					wrp.rep.tp = REDUCE
+					wrp.rep.index = i
+					<-wrp.tmp
+				}(i)
+				break
+			}
+		}
+	}
+}
 
+// the loop will call this function to assign task: 1 MAP 2 REDUCE
+// if the worker has already time out, but still doing their job
+func (c *Coordinator) handle_done_chan(wrp *Wrap_Done) {
+	if wrp.req.ts.tp == MAP {
+		if c.map_allocated[wrp.req.ts.index] == nil {
+			return
+		}
+		delete(c.map_allocated, wrp.req.ts.index)
+		c.map_done[wrp.req.ts.index] = wrp.req.ts
+	} else {
+		if c.reduce_allocated[wrp.req.ts.index] == nil {
+			return
+		}
+		delete(c.reduce_allocated, wrp.req.ts.index)
+		c.reduce_done[wrp.req.ts.index] = wrp.req.ts
+	}
+
+	go func() {
+		wrp.rep.state = idle
+		<-wrp.tmp
+	}()
+}
+
+// coordinator still have tasks, and worker has time out
+func (c *Coordinator) handle_time_out(ts *Task) {
+	ts.state = idle
+	if ts.tp == MAP {
+		delete(c.map_allocated, ts.index)
+	} else {
+		delete(c.reduce_allocated, ts.index)
+	}
 }
