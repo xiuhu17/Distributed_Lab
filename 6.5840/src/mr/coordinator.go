@@ -28,9 +28,9 @@ type Coordinator struct {
 	task_time map[*Task]time.Time
 
 	// channel for accepting data
-	ask_chan         chan *Wrap_Ask
-	done_chan        chan *Wrap_Done
-	handle_heartbeat chan interface{}
+	ask_chan   chan *Wrap_Ask
+	done_chan  chan *Wrap_Done
+	heart_beat chan *Task
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -85,7 +85,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.task_time = make(map[*Task]time.Time)
 	c.ask_chan = make(chan *Wrap_Ask)
 	c.done_chan = make(chan *Wrap_Done)
-	c.handle_heartbeat = make(chan interface{})
+	c.heart_beat = make(chan *Task)
 
 	c.server()
 	return &c
@@ -115,6 +115,8 @@ func (c *Coordinator) loop() {
 			c.handle_ask_chan(wrp)
 		case wrp := <-c.done_chan:
 			c.handle_done_chan(wrp)
+		case tsk := <-c.heart_beat:
+			c.handle_time_out(tsk)
 		}
 	}
 }
@@ -126,12 +128,13 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 		for i, _ := range c.files {
 			if c.map_allocated[i] == nil && c.map_done[i] == nil {
 				c.map_allocated[i] = wrp.req.ts
+				c.task_time[wrp.req.ts] = time.Now()
 				go func(i int) {
 					wrp.rep.state = progress
 					wrp.rep.tp = MAP
 					wrp.rep.index = i
 					wrp.rep.file = c.files[i]
-					<-wrp.tmp
+					wrp.tmp <- struct{}{}
 				}(i)
 				break
 			}
@@ -140,11 +143,12 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 		for i := 0; i < c.nReduce; i += 1 {
 			if c.reduce_allocated[i] == nil && c.reduce_done[i] == nil {
 				c.reduce_allocated[i] = wrp.req.ts
+				c.task_time[wrp.req.ts] = time.Now()
 				go func(i int) {
 					wrp.rep.state = progress
 					wrp.rep.tp = REDUCE
 					wrp.rep.index = i
-					<-wrp.tmp
+					wrp.tmp <- struct{}{}
 				}(i)
 				break
 			}
@@ -152,9 +156,12 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 	}
 }
 
-// the loop will call this function to assign task: 1 MAP 2 REDUCE
-// if the worker has already time out, but still doing their job
+// the loop will call this function to handle done task which is sent by worker
 func (c *Coordinator) handle_done_chan(wrp *Wrap_Done) {
+	// handle time stamp
+	delete(c.task_time, wrp.req.ts)
+
+	// handle main logic
 	if wrp.req.ts.tp == MAP {
 		if c.map_allocated[wrp.req.ts.index] == nil {
 			return
@@ -169,18 +176,33 @@ func (c *Coordinator) handle_done_chan(wrp *Wrap_Done) {
 		c.reduce_done[wrp.req.ts.index] = wrp.req.ts
 	}
 
+	// send back to client
 	go func() {
 		wrp.rep.state = idle
-		<-wrp.tmp
+		wrp.tmp <- struct{}{}
 	}()
 }
 
 // coordinator still have tasks, and worker has time out
+// delete the assigned work and delete the time
 func (c *Coordinator) handle_time_out(ts *Task) {
-	ts.state = idle
+	// handle the time
+	delete(c.task_time, ts)
 	if ts.tp == MAP {
 		delete(c.map_allocated, ts.index)
 	} else {
 		delete(c.reduce_allocated, ts.index)
+	}
+}
+
+func (c *Coordinator) check_time_out() {
+	for {
+		for key, value := range c.task_time {
+			if elapsed := time.Since(value); elapsed.Seconds() >= 10.00 {
+				go func(key *Task) {
+					c.heart_beat <- key
+				}(key)
+			}
+		}
 	}
 }
