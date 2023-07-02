@@ -30,39 +30,39 @@ type Request_Start_Task struct {
 }
 
 type Reply_Start_Task struct {
-	nMap    int
-	nRecude int
+	NMap    int
+	NRecude int
 }
 
 type Request_Ask_Task struct {
-	ts *Task
+	Ts *Task
 }
 
 type Reply_Ask_Task struct {
-	tp    Type
-	state State
-	index int
-	file  string
+	Tp    Type
+	State State
+	Index int
+	File  string
 }
 
 type Wrap_Ask struct {
-	req *Request_Ask_Task
-	rep *Reply_Ask_Task
-	tmp chan struct{}
+	Req *Request_Ask_Task
+	Rep *Reply_Ask_Task
+	Tmp chan struct{}
 }
 
 type Request_Done_Task struct {
-	ts *Task
+	Ts *Task
 }
 
 type Reply_Done_Task struct {
-	state State
+	State State
 }
 
 type Wrap_Done struct {
-	req *Request_Done_Task
-	rep *Reply_Done_Task
-	tmp chan struct{}
+	Req *Request_Done_Task
+	Rep *Reply_Done_Task
+	Tmp chan struct{}
 }
 
 // Cook up a unique-ish UNIX-domain socket name

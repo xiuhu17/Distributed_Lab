@@ -44,12 +44,12 @@ type KeyValue struct {
 }
 
 type Task struct {
-	state   State
-	tp      Type
-	nReduce int
-	nMap    int
-	index   int
-	file    string
+	State   State
+	Tp      Type
+	NReduce int
+	NMap    int
+	Index   int
+	File    string
 }
 
 // use ihash(key) % NReduce to choose the reduce
@@ -67,44 +67,71 @@ func ihash(key string) int {
 func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 	// Init the task
 	task := Task{}
-	task.Start_Task()
+	end_start := task.Start_Task()
+	if !end_start {
+		return
+	}
+	for {
+		end_ask := task.Ask_Task()
+		if !end_ask {
+			return
+		}
+		if task.Tp == MAP {
+			task.Do_Map(mapf)
+		} else {
+			task.Do_Reduce(reducef)
+		}
+		end_done := task.Done_Task(task.Tp)
+		if !end_done {
+			return
+		}
+	}
 }
 
-func (task *Task) Start_Task() {
+func (task *Task) Start_Task() bool {
+	logger.Debug(logger.DLog, "Start_Task started")
+
 	request := Request_Start_Task{}
 	reply := Reply_Start_Task{}
 	finished := call("Coordinator.PRC_Start_Task", &request, &reply)
 	if !finished {
-		logger.Debug(logger.DLog, "Seems the coordinator has finished")
-		return
+		// logger.Debug(logger.DLog, "Seems the coordinator has finished")
+		return finished
 	}
-	task.nMap = reply.nMap
-	task.nReduce = reply.nRecude
+	task.NMap = reply.NMap
+	task.NReduce = reply.NRecude
+	logger.Debug(logger.DLog, "Start_Task ended")
+
+	return true
 }
 
-func (task *Task) Ask_Task() {
+func (task *Task) Ask_Task() bool {
 	// request the info from coordinator
-	request := Request_Ask_Task{ts: task}
+	logger.Debug(logger.DLog, "Ask_Task started")
+	request := Request_Ask_Task{Ts: task}
 	reply := Reply_Ask_Task{}
 	finished := call("Coordinator.RPC_Ask_Task", &request, &reply)
 	if !finished {
-		logger.Debug(logger.DLog, "Seems the coordinator has finished")
+		return finished
 	}
 
 	// assign the reply
-	task.tp = reply.tp
-	task.index = reply.index
-	task.state = reply.state
-	if reply.tp == MAP {
-		task.file = reply.file
+	task.Tp = reply.Tp
+	task.Index = reply.Index
+	task.State = reply.State
+	if reply.Tp == MAP {
+		task.File = reply.File
 	}
+	logger.Debug(logger.DLog, "Ask_Task ended")
+	return true
 }
 
 // ask the coordinate for the map task
 // do the map task
 func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 	// read the file
-	file, err := os.Open(task.file)
+	logger.Debug(logger.DLog, "Do_Map Started")
+	file, err := os.Open(task.File)
 	if err != nil {
 		logger.Debug(logger.DLog, "File can not be opened")
 	}
@@ -113,13 +140,13 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 		logger.Debug(logger.DLog, "File can not be read")
 	}
 	file.Close()
-	kva := mapf(task.file, string(content))
+	kva := mapf(task.File, string(content))
 
 	// temp files created and write into them
-	temp_files := make([]string, task.nReduce)
-	hash_json := make([]*json.Encoder, task.nReduce)
-	for i := 0; i < task.nReduce; i += 1 {
-		temp_files[i] = fmt.Sprintf("mr-%d-%d", task.index, i)
+	temp_files := make([]string, task.NReduce)
+	hash_json := make([]*json.Encoder, task.NReduce)
+	for i := 0; i < task.NReduce; i += 1 {
+		temp_files[i] = fmt.Sprintf("mr-%d-%d", task.Index, i)
 		fd, err := ioutil.TempFile(".", temp_files[i])
 		if err != nil {
 			logger.Debug(logger.DLog, "File can not be encoded to json")
@@ -128,7 +155,7 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 		hash_json[i] = enc
 	}
 	for _, kv := range kva {
-		enc := hash_json[(ihash(kv.Key) % task.nReduce)]
+		enc := hash_json[(ihash(kv.Key) % task.NReduce)]
 		err := enc.Encode(&kv)
 		if err != nil {
 			logger.Debug(logger.DLog, "Can not write into json file")
@@ -137,7 +164,7 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 
 	// rename the file
 	for i, temp_file := range temp_files {
-		useName := fmt.Sprintf("mr-%d-%d", task.index, i)
+		useName := fmt.Sprintf("mr-%d-%d", task.Index, i)
 		if _, err := os.Stat(useName); err == nil { // exists
 			continue
 		} else if os.IsNotExist(err) {
@@ -146,15 +173,17 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 			logger.Debug(logger.DLog, "Problem with renaming the file")
 		}
 	}
+	logger.Debug(logger.DLog, "Do_Map Ended")
 }
 
 // ask the coordinate for the reduce task
 // do the reduce task
 func (task *Task) Do_Reduce(reducef func(string, []string) string) {
+	logger.Debug(logger.DLog, "Do_Reduce Start")
 	// read all files
 	kva := []KeyValue{}
-	for i := 0; i < task.nMap; i += 1 {
-		file, err := os.Open(fmt.Sprintf("mr-%d-%d", i, task.index))
+	for i := 0; i < task.NMap; i += 1 {
+		file, err := os.Open(fmt.Sprintf("mr-%d-%d", i, task.Index))
 		if err != nil {
 			logger.Debug(logger.DLog, "File can not be opened")
 		}
@@ -170,7 +199,7 @@ func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 	}
 
 	// temp final file created and write into it
-	temp_file := fmt.Sprintf("mr-out-%d", task.index)
+	temp_file := fmt.Sprintf("mr-out-%d", task.Index)
 	fd, err := ioutil.TempFile(".", temp_file)
 	if err != nil {
 		logger.Debug(logger.DLog, "File can not be encoded to json")
@@ -193,7 +222,7 @@ func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 	}
 
 	// rename the file
-	useName := fmt.Sprintf("mr-out-%d", task.index)
+	useName := fmt.Sprintf("mr-out-%d", task.Index)
 	if _, err := os.Stat(useName); err == nil { // exists
 		return
 	} else if os.IsNotExist(err) {
@@ -201,43 +230,22 @@ func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 	} else {
 		logger.Debug(logger.DLog, "Problem with renaming the file")
 	}
+	logger.Debug(logger.DLog, "Do_Reduce End")
 }
 
 // indicate which kind of task has done
-func (task *Task) Done_Task(tp Type) {
-	request := Request_Done_Task{ts: task}
+func (task *Task) Done_Task(tp Type) bool {
+	logger.Debug(logger.DLog, "Done_Task started")
+	request := Request_Done_Task{Ts: task}
 	reply := Reply_Done_Task{}
+	task.State = reply.State
 	finished := call("Coordinator.RPC_Done_Task", &request, &reply)
 	if !finished {
-		logger.Debug(logger.DLog, "Seems the coordinator has finished")
+		// logger.Debug(logger.DLog, "Seems the coordinator has finished")
+		return finished
 	}
-}
-
-// example function to show how to make an RPC call to the coordinator.
-//
-// the RPC argument and reply types are defined in rpc.go.
-func CallExample() {
-
-	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
-
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Example", &args, &reply)
-	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("reply.Y %v\n", reply.Y)
-	} else {
-		fmt.Printf("call failed!\n")
-	}
+	logger.Debug(logger.DLog, "Done_Task ended")
+	return true
 }
 
 // send an RPC request to the coordinator, wait for the response.
