@@ -28,6 +28,7 @@ const (
 	MAP Type = iota
 	REDUCE
 	NONE
+	FINISHED
 )
 
 // Map functions return a slice of KeyValue.
@@ -70,8 +71,10 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 			task.Do_Map(mapf)
 		} else if task.Tp == REDUCE {
 			task.Do_Reduce(reducef)
-		} else {
+		} else if task.Tp == NONE {
 			continue
+		} else {
+			return
 		}
 
 		end_done := task.Done_Task(task.Tp)
