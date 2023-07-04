@@ -30,6 +30,7 @@ type Type int
 const (
 	MAP Type = iota
 	REDUCE
+	NONE
 )
 
 // Map functions return a slice of KeyValue.
@@ -72,9 +73,12 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 		}
 		if task.Tp == MAP {
 			task.Do_Map(mapf)
-		} else {
+		} else if task.Tp == REDUCE {
 			task.Do_Reduce(reducef)
+		} else {
+			continue
 		}
+
 		end_done := task.Done_Task(task.Tp)
 		if !end_done {
 			return
@@ -129,7 +133,7 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 	temp_fds := make([]*os.File, task.NReduce)
 	hash_json := make([]*json.Encoder, task.NReduce)
 	for i := 0; i < task.NReduce; i += 1 {
-		temp_fds[i], _ = ioutil.TempFile("mr-tmp", fmt.Sprintf("mr-%d-%d", task.Index, i))
+		temp_fds[i], _ = ioutil.TempFile(".", fmt.Sprintf("mr-%d-%d", task.Index, i))
 		enc := json.NewEncoder(temp_fds[i])
 		hash_json[i] = enc
 	}
@@ -143,7 +147,7 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 
 	// rename the file
 	for i, temp_file := range temp_fds {
-		useName := fmt.Sprintf("mr-tmp/mr-%d-%d", task.Index, i)
+		useName := fmt.Sprintf("mr-%d-%d", task.Index, i)
 		err := os.Rename(temp_file.Name(), useName)
 		if err != nil {
 			logger.Debug(logger.DLog, "Can not rename the file")
@@ -155,10 +159,11 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 // do the reduce task
 func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 	// read all files
+	logger.Debug(logger.DLog, "Do_Reduce began")
 	kva := []KeyValue{}
 	decs := make([]*json.Decoder, task.NMap)
 	for i := 0; i < task.NMap; i += 1 {
-		file, err := os.Open(fmt.Sprintf("mr-tmp/mr-%d-%d", i, task.Index))
+		file, err := os.Open(fmt.Sprintf("mr-%d-%d", i, task.Index))
 		if err != nil {
 			logger.Debug(logger.DLog, "File can not be opened")
 		}
@@ -196,6 +201,7 @@ func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 		fmt.Fprintf(fd, "%v %v\n", kva[i].Key, output)
 		i = j
 	}
+	logger.Debug(logger.DLog, "Do_Reduce finished")
 }
 
 // indicate which kind of task has done
@@ -204,7 +210,7 @@ func (task *Task) Done_Task(tp Type) bool {
 	request := Request_Done_Task{Ts: task}
 	reply := Reply_Done_Task{}
 	finished := call("Coordinator.RPC_Done_Task", &request, &reply)
-	if !finished || reply.dn {
+	if !finished || reply.Dn {
 		return false
 	}
 	return true

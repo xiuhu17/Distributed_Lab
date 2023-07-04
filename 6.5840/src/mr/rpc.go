@@ -55,7 +55,7 @@ type Request_Done_Task struct {
 }
 
 type Reply_Done_Task struct {
-	dn bool
+	Dn bool
 }
 
 type Wrap_Done struct {
