@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -33,7 +34,7 @@ type Coordinator struct {
 	// channel for accepting data
 	ask_chan   chan *Wrap_Ask
 	done_chan  chan *Wrap_Done
-	heart_beat chan *Task
+	heart_beat chan chan bool
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -61,23 +62,18 @@ func (c *Coordinator) server() {
 }
 
 // main/mrcoordinator.go calls Done() periodically to find out
-// if the entire job has finished.
-// 让 main/mrcoordinator.go 退出
 func (c *Coordinator) Done() bool {
 	ret := true
-
-	// Your code here.
-
 	return ret
 }
 
 // create a Coordinator.
-// main/mrcoordinator.go calls this function.
-// nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 
 	// initiate the server
+	tmpPath := filepath.Join("mr-tmp")
+	os.MkdirAll(tmpPath, os.ModePerm)
 	c.files = append([]string(nil), files...)
 	c.nReduce = nReduce
 	c.nMap = len(files)
@@ -88,7 +84,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.task_time = make(map[*Task]time.Time)
 	c.ask_chan = make(chan *Wrap_Ask)
 	c.done_chan = make(chan *Wrap_Done)
-	c.heart_beat = make(chan *Task)
+	c.heart_beat = make(chan chan bool)
 
 	// start the server
 	c.server()
@@ -111,12 +107,11 @@ func (c *Coordinator) PRC_Start_Task(request *Request_Start_Task, reply *Reply_S
 
 func (c *Coordinator) RPC_Ask_Task(request *Request_Ask_Task, reply *Reply_Ask_Task) error {
 	wrp := Wrap_Ask{Req: request, Rep: reply, Tmp: make(chan struct{})}
-	c.ask_chan <- (&wrp)
-	<-wrp.Tmp
+	c.ask_chan <- (&wrp) // used for for{select{case: case:}}, 并发
+	<-wrp.Tmp            // used for wait purpose
 	reply.File = wrp.Rep.File
 	reply.Index = wrp.Rep.Index
 	reply.Tp = wrp.Rep.Tp
-	reply.State = wrp.Rep.State
 	return nil
 }
 
@@ -124,7 +119,6 @@ func (c *Coordinator) RPC_Done_Task(request *Request_Done_Task, reply *Reply_Don
 	wrp := Wrap_Done{Req: request, Rep: reply, Tmp: make(chan struct{})}
 	c.done_chan <- (&wrp)
 	<-wrp.Tmp
-	reply.State = wrp.Rep.State
 	return nil
 }
 
@@ -139,8 +133,11 @@ func (c *Coordinator) loop(wg *sync.WaitGroup) {
 			c.handle_ask_chan(wrp)
 		case wrp := <-c.done_chan:
 			c.handle_done_chan(wrp)
-		case tsk := <-c.heart_beat:
-			c.handle_time_out(tsk)
+		case beat := <-c.heart_beat:
+			if c.handle_time_out(&beat) {
+				os.RemoveAll("mr-tmp/")
+				return
+			}
 		default:
 			logger.Debug(logger.DLog, "Problem with the server loop goroutine")
 		}
@@ -156,13 +153,10 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 			if c.map_allocated[i] == nil && c.map_done[i] == nil {
 				c.map_allocated[i] = wrp.Req.Ts
 				c.task_time[wrp.Req.Ts] = time.Now()
-				go func(i int) {
-					wrp.Rep.State = progress
-					wrp.Rep.Tp = MAP
-					wrp.Rep.Index = i
-					wrp.Rep.File = c.files[i]
-					wrp.Tmp <- struct{}{}
-				}(i)
+				wrp.Rep.Tp = MAP
+				wrp.Rep.Index = i
+				wrp.Rep.File = c.files[i]
+				wrp.Tmp <- struct{}{}
 				break
 			}
 		}
@@ -171,12 +165,9 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 			if c.reduce_allocated[i] == nil && c.reduce_done[i] == nil {
 				c.reduce_allocated[i] = wrp.Req.Ts
 				c.task_time[wrp.Req.Ts] = time.Now()
-				go func(i int) {
-					wrp.Rep.State = progress
-					wrp.Rep.Tp = REDUCE
-					wrp.Rep.Index = i
-					wrp.Tmp <- struct{}{}
-				}(i)
+				wrp.Rep.Tp = REDUCE
+				wrp.Rep.Index = i
+				wrp.Tmp <- struct{}{}
 				break
 			}
 		}
@@ -192,52 +183,63 @@ func (c *Coordinator) handle_done_chan(wrp *Wrap_Done) {
 
 	// handle main logic
 	if wrp.Req.Ts.Tp == MAP {
-		if c.map_allocated[wrp.Req.Ts.Index] == nil { // already timeout
-			return
+		if c.map_allocated[wrp.Req.Ts.Index] != nil { // not time out
+			delete(c.map_allocated, wrp.Req.Ts.Index)
+			c.map_done[wrp.Req.Ts.Index] = wrp.Req.Ts
 		}
-		delete(c.map_allocated, wrp.Req.Ts.Index) // normal
-		c.map_done[wrp.Req.Ts.Index] = wrp.Req.Ts
 	} else {
-		if c.reduce_allocated[wrp.Req.Ts.Index] == nil { // already timeout
-			return
+		if c.reduce_allocated[wrp.Req.Ts.Index] != nil { // not time out
+			delete(c.reduce_allocated, wrp.Req.Ts.Index)
+			c.reduce_done[wrp.Req.Ts.Index] = wrp.Req.Ts
 		}
-		delete(c.reduce_allocated, wrp.Req.Ts.Index) // normal
-		c.reduce_done[wrp.Req.Ts.Index] = wrp.Req.Ts
 	}
 
 	// send back to client
-	wrp.Rep.State = idle
-	wrp.Tmp <- struct{}{}
+	if len(c.reduce_done) == c.nReduce {
+		wrp.Rep.dn = true
+	} else {
+		wrp.Rep.dn = false
+	}
 
-	logger.Debug(logger.DLog, "handle_done_chan End")
+	wrp.Tmp <- struct{}{}
 }
 
 // coordinator still have tasks, and worker has time out
 // delete the assigned work and delete the time
-func (c *Coordinator) handle_time_out(ts *Task) {
-	logger.Debug(logger.DLog, "handle_time_out Start")
-	// handle the time
-	delete(c.task_time, ts)
-	if ts.Tp == MAP {
-		delete(c.map_allocated, ts.Index)
-	} else {
-		delete(c.reduce_allocated, ts.Index)
+func (c *Coordinator) handle_time_out(beat *chan bool) bool {
+	if len(c.reduce_done) == c.nReduce {
+		(*beat) <- true
+		return true
 	}
-	logger.Debug(logger.DLog, "handle_time_out End")
+
+	collect := []*Task{}
+	for key, value := range c.task_time {
+		if elapsed := time.Since(value); elapsed.Seconds() >= 10.00 {
+			collect = append(collect, key)
+		}
+	}
+
+	for _, ts := range collect {
+		delete(c.task_time, ts)
+		if ts.Tp == MAP {
+			delete(c.map_allocated, ts.Index)
+		} else {
+			delete(c.reduce_allocated, ts.Index)
+		}
+	}
+	(*beat) <- false
+	return false
 }
 
+// change check_time_out to time.sleep(time.second)
 func (c *Coordinator) check_time_out(wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
-		if len(c.reduce_done) == c.nReduce {
-			break
-		}
-		for key, value := range c.task_time {
-			if elapsed := time.Since(value); elapsed.Seconds() >= 10.00 {
-				go func(key *Task) {
-					c.heart_beat <- key
-				}(key)
-			}
+		time.Sleep(time.Second)
+		beat := make(chan bool)
+		c.heart_beat <- beat
+		if <-beat {
+			return
 		}
 	}
 }

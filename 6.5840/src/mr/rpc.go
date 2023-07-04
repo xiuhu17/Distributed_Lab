@@ -40,7 +40,6 @@ type Request_Ask_Task struct {
 
 type Reply_Ask_Task struct {
 	Tp    Type
-	State State
 	Index int
 	File  string
 }
@@ -56,7 +55,7 @@ type Request_Done_Task struct {
 }
 
 type Reply_Done_Task struct {
-	State State
+	dn bool
 }
 
 type Wrap_Done struct {
