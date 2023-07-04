@@ -6,10 +6,9 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
-
-	"6.5840/logger"
 )
 
 type Coordinator struct {
@@ -33,9 +32,7 @@ type Coordinator struct {
 	// channel for accepting data
 	ask_chan   chan *Wrap_Ask
 	done_chan  chan *Wrap_Done
-	heart_beat chan chan bool
-
-	// cond *sync.Cond
+	heart_beat chan *chan bool
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -83,8 +80,9 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.task_time = make(map[*Task]time.Time)
 	c.ask_chan = make(chan *Wrap_Ask)
 	c.done_chan = make(chan *Wrap_Done)
-	c.heart_beat = make(chan chan bool)
-	// c.cond =
+	c.heart_beat = make(chan *chan bool)
+	tmpPath := filepath.Join("mr-tmp")
+	os.MkdirAll(tmpPath, os.ModePerm)
 
 	// start the server
 	c.server()
@@ -108,18 +106,14 @@ func (c *Coordinator) PRC_Start_Task(request *Request_Start_Task, reply *Reply_S
 func (c *Coordinator) RPC_Ask_Task(request *Request_Ask_Task, reply *Reply_Ask_Task) error {
 	wrp := Wrap_Ask{Req: request, Rep: reply, Tmp: make(chan struct{})}
 	c.ask_chan <- (&wrp) // used for for{select{case: case:}}, 并发
-	logger.Debug(logger.DLog, "RPC_Ask_Task")
-	<-wrp.Tmp // used for wait purpose
+	<-wrp.Tmp            // used for wait purpose, handle_... function
 	if reply.Tp = wrp.Rep.Tp; reply.Tp == NONE {
-		// c.cond.Wait()
-		logger.Debug(logger.DLog, "RPC_Ask_Task, %d", reply.Tp)
 		return nil
 	} else {
 		reply.File = wrp.Rep.File
 		reply.Index = wrp.Rep.Index
 		reply.Tp = wrp.Rep.Tp
 	}
-	logger.Debug(logger.DLog, "RPC_Ask_Task, %d", reply.Tp)
 	return nil
 }
 
@@ -139,7 +133,7 @@ func (c *Coordinator) loop(wg *sync.WaitGroup) {
 		case wrp := <-c.done_chan:
 			c.handle_done_chan(wrp)
 		case beat := <-c.heart_beat:
-			if c.handle_time_out(&beat) {
+			if c.handle_time_out(beat) {
 				return
 			}
 		}
@@ -167,7 +161,6 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 		wrp.Tmp <- struct{}{}
 		return
 	}
-	logger.Debug(logger.DLog, "handle_ask_chan reduce begin")
 	if len(c.reduce_done) != c.nReduce { // for reduce
 		for i := 0; i < c.nReduce; i += 1 {
 			_, ok1 := c.reduce_allocated[i]
@@ -178,13 +171,11 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 				wrp.Rep.Tp = REDUCE
 				wrp.Rep.Index = i
 				wrp.Tmp <- struct{}{}
-				logger.Debug(logger.DLog, "handle_ask_chan reduce end %d %d", i, c.nReduce)
 				return
 			}
 		}
 		wrp.Rep.Tp = NONE
 		wrp.Tmp <- struct{}{}
-		logger.Debug(logger.DLog, "handle_ask_chan reduce end")
 		return
 	}
 }
@@ -212,9 +203,6 @@ func (c *Coordinator) handle_done_chan(wrp *Wrap_Done) {
 	}
 
 	// send back to client
-	// if len(c.map_done) == c.nMap || len(c.reduce_done) == c.nReduce {
-	// 	c.cond.Broadcast()
-	// }
 
 	if len(c.reduce_done) == c.nReduce {
 		wrp.Rep.Dn = true
@@ -233,22 +221,16 @@ func (c *Coordinator) handle_time_out(beat *chan bool) bool {
 		return true
 	}
 
-	collect := []*Task{}
 	for key, value := range c.task_time {
-		if elapsed := time.Since(value); elapsed.Seconds() >= 10.00 {
-			collect = append(collect, key)
+		if time.Since(value).Seconds() > 10 {
+			if key.Tp == MAP {
+				delete(c.map_allocated, key.Index)
+			} else if key.Tp == REDUCE {
+				delete(c.reduce_allocated, key.Index)
+			}
 		}
 	}
 
-	for _, ts := range collect {
-		delete(c.task_time, ts)
-		if ts.Tp == MAP {
-			delete(c.map_allocated, ts.Index)
-		} else {
-			delete(c.reduce_allocated, ts.Index)
-		}
-		// c.cond.Broadcast()
-	}
 	(*beat) <- false
 	return false
 }
@@ -257,13 +239,11 @@ func (c *Coordinator) handle_time_out(beat *chan bool) bool {
 func (c *Coordinator) check_time_out(wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
-		logger.Debug(logger.DLog, "check_time_out began")
 		time.Sleep(time.Second)
 		beat := make(chan bool)
-		c.heart_beat <- beat
-		if <-beat {
+		c.heart_beat <- &beat
+		if res := <-beat; res {
 			return
 		}
-		logger.Debug(logger.DLog, "check_time_out began")
 	}
 }
