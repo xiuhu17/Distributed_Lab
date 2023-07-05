@@ -29,7 +29,8 @@ type Coordinator struct {
 	reduce_done      map[int]*Task
 
 	// task to last heartbeat time
-	task_time map[*Task]time.Time
+	map_time    map[int]time.Time
+	reduce_time map[int]time.Time
 
 	// channel for accepting data
 	ask_chan   chan *Wrap_Ask
@@ -79,7 +80,8 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.map_done = make(map[int]*Task)
 	c.reduce_allocated = make(map[int]*Task)
 	c.reduce_done = make(map[int]*Task)
-	c.task_time = make(map[*Task]time.Time)
+	c.map_time = make(map[int]time.Time)
+	c.reduce_time = make(map[int]time.Time)
 	c.ask_chan = make(chan *Wrap_Ask)
 	c.done_chan = make(chan *Wrap_Done)
 	c.heart_beat = make(chan *chan bool)
@@ -92,8 +94,8 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	// start those two goroutines
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go c.loop(&wg)
 	go c.check_time_out(&wg)
+	go c.loop(&wg)
 	wg.Wait()
 
 	return &c
@@ -154,10 +156,11 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 			_, ok2 := c.map_done[i]
 			if !ok1 && !ok2 {
 				c.map_allocated[i] = wrp.Req.Ts
-				c.task_time[wrp.Req.Ts] = time.Now()
+				c.map_time[i] = time.Now()
 				wrp.Rep.Tp = MAP
 				wrp.Rep.Index = i
 				wrp.Rep.File = c.files[i]
+				logger.Debug(logger.DInfo, "Assign: ts_pointer: %p, ts_idx: %v", wrp.Req.Ts, wrp.Rep.Index)
 				wrp.Tmp <- struct{}{}
 				return
 			}
@@ -167,20 +170,18 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 		return
 	}
 
-	logger.Debug(logger.DInfo, "Begin reduce assign")
 	if len(c.map_done) == c.nMap && len(c.reduce_done) != c.nReduce { // for reduce
 		for i := 0; i < c.nReduce; i += 1 {
 			_, ok1 := c.reduce_allocated[i]
 			_, ok2 := c.reduce_done[i]
 			if !ok1 && !ok2 {
 				c.reduce_allocated[i] = wrp.Req.Ts
-				c.task_time[wrp.Req.Ts] = time.Now()
+				c.reduce_time[i] = time.Now()
 				wrp.Rep.Tp = REDUCE
 				wrp.Rep.Index = i
 				wrp.Tmp <- struct{}{}
 				return
 			}
-			logger.Debug(logger.DInfo, "End reduce assign")
 		}
 		wrp.Rep.Tp = NONE
 		wrp.Tmp <- struct{}{}
@@ -191,33 +192,17 @@ func (c *Coordinator) handle_ask_chan(wrp *Wrap_Ask) {
 	wrp.Tmp <- struct{}{}
 }
 
-// change check_time_out to time.sleep(time.second)
-func (c *Coordinator) check_time_out(wg *sync.WaitGroup) {
-	defer wg.Done()
-	for {
-		time.Sleep(time.Second)
-		beat := make(chan bool)
-		c.heart_beat <- &beat
-		if res := <-beat; res {
-			return
-		}
-	}
-}
-
 // the loop will call this function to handle done task which is sent by worker
 func (c *Coordinator) handle_done_chan(wrp *Wrap_Done) {
 	// handle main logic
-	_, ok := c.task_time[wrp.Req.Ts]
-	if ok {
-		if wrp.Req.Ts.Tp == MAP {
-			delete(c.task_time, wrp.Req.Ts)
-			delete(c.map_allocated, wrp.Req.Ts.Index)
-			c.map_done[wrp.Req.Ts.Index] = wrp.Req.Ts
-		} else if wrp.Req.Ts.Tp == REDUCE {
-			delete(c.task_time, wrp.Req.Ts)
-			delete(c.reduce_allocated, wrp.Req.Ts.Index)
-			c.reduce_done[wrp.Req.Ts.Index] = wrp.Req.Ts
-		}
+	if wrp.Req.Ts.Tp == MAP {
+		delete(c.map_time, wrp.Req.Ts.Index)
+		delete(c.map_allocated, wrp.Req.Ts.Index)
+		c.map_done[wrp.Req.Ts.Index] = wrp.Req.Ts
+	} else if wrp.Req.Ts.Tp == REDUCE {
+		delete(c.reduce_time, wrp.Req.Ts.Index)
+		delete(c.reduce_allocated, wrp.Req.Ts.Index)
+		c.reduce_done[wrp.Req.Ts.Index] = wrp.Req.Ts
 	}
 
 	if len(c.reduce_done) == c.nReduce {
@@ -237,17 +222,33 @@ func (c *Coordinator) handle_time_out(beat *chan bool) bool {
 		return true
 	}
 
-	for key, value := range c.task_time {
+	for key, value := range c.map_time {
 		if time.Since(value).Seconds() > 10 {
-			delete(c.task_time, key)
-			if key.Tp == MAP {
-				delete(c.map_allocated, key.Index)
-			} else if key.Tp == REDUCE {
-				delete(c.reduce_allocated, key.Index)
-			}
+			delete(c.map_time, key)
+			delete(c.map_allocated, key)
+		}
+	}
+
+	for key, value := range c.reduce_time {
+		if time.Since(value).Seconds() > 10 {
+			delete(c.reduce_time, key)
+			delete(c.reduce_allocated, key)
 		}
 	}
 
 	(*beat) <- false
 	return false
+}
+
+// change check_time_out to time.sleep(time.second)
+func (c *Coordinator) check_time_out(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for {
+		time.Sleep(time.Second)
+		beat := make(chan bool)
+		c.heart_beat <- &beat
+		if res := <-beat; res {
+			return
+		}
+	}
 }

@@ -77,7 +77,7 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 			return
 		}
 
-		end_done := task.Done_Task(task.Tp)
+		end_done := task.Done_Task()
 		if !end_done {
 			return
 		}
@@ -116,42 +116,6 @@ func (task *Task) Ask_Task() bool {
 // ask the coordinate for the map task
 // do the map task
 func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
-	// // read the file
-	// file, err := os.Open(task.File)
-	// if err != nil {
-	// 	logger.Debug(logger.DLog, "File can not be opened")
-	// }
-	// content, err := ioutil.ReadAll(file)
-	// if err != nil {
-	// 	logger.Debug(logger.DLog, "File can not be read")
-	// }
-	// file.Close()
-	// kva := mapf(task.File, string(content))
-
-	// // temp files created and write into them
-	// temp_fds := make([]*os.File, task.NReduce)
-	// hash_json := make([]*json.Encoder, task.NReduce)
-	// for i := 0; i < task.NReduce; i += 1 {
-	// 	temp_fds[i], _ = ioutil.TempFile(".", fmt.Sprintf("mr-%d-%d", task.Index, i))
-	// 	enc := json.NewEncoder(temp_fds[i])
-	// 	hash_json[i] = enc
-	// }
-	// for _, kv := range kva {
-	// 	enc := hash_json[(ihash(kv.Key) % task.NReduce)]
-	// 	err := enc.Encode(&kv)
-	// 	if err != nil {
-	// 		logger.Debug(logger.DLog, "Can not write into json file")
-	// 	}
-	// }
-
-	// // rename the file
-	// for i, temp_file := range temp_fds {
-	// 	useName := fmt.Sprintf("mr-%d-%d", task.Index, i)
-	// 	err := os.Rename(temp_file.Name(), useName)
-	// 	if err != nil {
-	// 		logger.Debug(logger.DLog, "Can not rename the file")
-	// 	}
-	// }
 	file, err := os.Open(task.File)
 	if err != nil {
 		log.Fatalf("cannot open %v", task.File)
@@ -195,54 +159,6 @@ func (task *Task) Do_Map(mapf func(string, string) []KeyValue) {
 // ask the coordinate for the reduce task
 // do the reduce task
 func (task *Task) Do_Reduce(reducef func(string, []string) string) {
-	// // read all files
-	// kva := []KeyValue{}
-	// decs := make([]*json.Decoder, task.NMap)
-	// for i := 0; i < task.NMap; i += 1 {
-	// 	file, err := os.Open(fmt.Sprintf("mr-%d-%d", i, task.Index))
-	// 	if err != nil {
-	// 		logger.Debug(logger.DLog, "File can not be opened")
-	// 	}
-	// 	decs[i] = json.NewDecoder(file)
-	// 	file.Close()
-	// }
-
-	// logger.Debug(logger.DLog, "begin %d %d", len(kva), len(decs))
-
-	// for i := 0; i < task.NMap; i += 1 {
-	// 	var kv KeyValue
-	// 	if err := decs[i].Decode(&kv); err != nil {
-	// 		break
-	// 	}
-	// 	logger.Debug(logger.DLog, "begin %v %v", kv.Key, kv.Value)
-	// 	kva = append(kva, kv)
-	// 	logger.Debug(logger.DLog, "begin %d", len(kva))
-	// }
-
-	// // sort the kva, and deal with the data
-	// sort.Sort(ByKey(kva))
-
-	// // temp final file created and write into it
-	// temp_file := fmt.Sprintf("mr-out-%d", task.Index)
-	// fd, _ := os.Create(temp_file)
-
-	// i := 0
-	// for i < len(kva) {
-	// 	j := i + 1
-	// 	for j < len(kva) && kva[j].Key == kva[i].Key {
-	// 		j++
-	// 	}
-	// 	values := []string{}
-	// 	for k := i; k < j; k++ {
-	// 		values = append(values, kva[k].Value)
-	// 	}
-	// 	output := reducef(kva[i].Key, values)
-	// 	fmt.Fprintf(fd, "%v %v\n", kva[i].Key, output)
-	// 	i = j
-	// }
-
-	// fd.Close()
-	// open files with format "mr-*-[reduceTaskNumber]"
 	intermediateFiles := make([]*os.File, task.NMap)
 	decoders := make([]*json.Decoder, task.NMap)
 	for i := 0; i < task.NMap; i++ {
@@ -292,7 +208,7 @@ func (task *Task) Do_Reduce(reducef func(string, []string) string) {
 
 // indicate which kind of task has done
 // return false means finishes
-func (task *Task) Done_Task(tp Type) bool {
+func (task *Task) Done_Task() bool {
 	request := Request_Done_Task{Ts: task}
 	reply := Reply_Done_Task{}
 	finished := call("Coordinator.RPC_Done_Task", &request, &reply)
