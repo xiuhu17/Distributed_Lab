@@ -1,0 +1,87 @@
+*** Cannot find timeout command; proceeding without timeouts.
+*** Starting wc test.
+Topic: INFO Time: 000010 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400017ea80, ts_idx: 0
+Topic: INFO Time: 000011 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400006a510, ts_idx: 1
+Topic: INFO Time: 010332 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000290c60, ts_idx: 2
+Topic: INFO Time: 010333 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140000b4960, ts_idx: 3
+Topic: INFO Time: 010333 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000300510, ts_idx: 4
+Topic: INFO Time: 012951 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000301080, ts_idx: 5
+Topic: INFO Time: 013785 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400006afc0, ts_idx: 6
+Topic: INFO Time: 013867 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400006b9e0, ts_idx: 7
+Topic: INFO Time: 100018 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140005468d0, ts_idx: 0
+Topic: INFO Time: 100019 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000696cf0, ts_idx: 1
+--- wc test: PASS
+rm: mr-tmp: is a directory
+*** Starting indexer test.
+Topic: INFO Time: 010381 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140001848d0, ts_idx: 0
+Topic: INFO Time: 010384 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000070ed0, ts_idx: 1
+Topic: INFO Time: 010646 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000071a10, ts_idx: 2
+Topic: INFO Time: 010845 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140000fec60, ts_idx: 3
+Topic: INFO Time: 010978 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000248450, ts_idx: 4
+Topic: INFO Time: 011091 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000248e70, ts_idx: 5
+Topic: INFO Time: 011285 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140000ff860, ts_idx: 6
+Topic: INFO Time: 011335 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140002496b0, ts_idx: 7
+--- indexer test: PASS
+*** Starting map parallelism test.
+rm: mr-tmp: is a directory
+Topic: INFO Time: 011725 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000284300, ts_idx: 0
+Topic: INFO Time: 011726 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400006a990, ts_idx: 1
+Topic: INFO Time: 021919 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400017ea80, ts_idx: 2
+Topic: INFO Time: 021922 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400017edb0, ts_idx: 3
+Topic: INFO Time: 032032 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000284b40, ts_idx: 4
+Topic: INFO Time: 032051 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400017f4a0, ts_idx: 5
+Topic: INFO Time: 042202 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000258060, ts_idx: 6
+Topic: INFO Time: 042215 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000099560, ts_idx: 7
+--- map parallelism test: PASS
+*** Starting reduce parallelism test.
+rm: mr-tmp: is a directory
+Topic: INFO Time: 011702 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000094300, ts_idx: 0
+Topic: INFO Time: 011704 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000094750, ts_idx: 1
+Topic: INFO Time: 011809 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400018b1d0, ts_idx: 2
+Topic: INFO Time: 011827 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400018bbf0, ts_idx: 3
+Topic: INFO Time: 011886 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000149350, ts_idx: 4
+Topic: INFO Time: 011887 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000226510, ts_idx: 5
+Topic: INFO Time: 011939 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140000956b0, ts_idx: 6
+Topic: INFO Time: 011940 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140000959e0, ts_idx: 7
+--- reduce parallelism test: PASS
+*** Starting job count test.
+rm: mr-tmp: is a directory
+Topic: INFO Time: 011941 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000284300, ts_idx: 0
+Topic: INFO Time: 011942 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400010a690, ts_idx: 1
+Topic: INFO Time: 036033 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000068c90, ts_idx: 2
+Topic: INFO Time: 036535 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400010ae40, ts_idx: 3
+Topic: INFO Time: 064958 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140000694d0, ts_idx: 4
+Topic: INFO Time: 065695 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140000699e0, ts_idx: 5
+Topic: INFO Time: 094105 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400010b170, ts_idx: 6
+Topic: INFO Time: 097661 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400018af60, ts_idx: 7
+--- job count test: PASS
+rm: mr-tmp: is a directory
+*** Starting early exit test.
+Topic: INFO Time: 011854 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140001471d0, ts_idx: 0
+Topic: INFO Time: 011854 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400018aa50, ts_idx: 1
+Topic: INFO Time: 011870 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000147800, ts_idx: 2
+Topic: INFO Time: 011882 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000202390, ts_idx: 3
+Topic: INFO Time: 011904 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400018b6e0, ts_idx: 4
+Topic: INFO Time: 011909 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400018bf20, ts_idx: 5
+Topic: INFO Time: 011924 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000202f90, ts_idx: 6
+Topic: INFO Time: 011941 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140002039b0, ts_idx: 7
+--- early exit test: PASS
+rm: mr-tmp: is a directory
+*** Starting crash test.
+Topic: INFO Time: 011767 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000070990, ts_idx: 0
+Topic: INFO Time: 011768 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000184e70, ts_idx: 1
+Topic: INFO Time: 011804 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000071050, ts_idx: 2
+Topic: INFO Time: 011808 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000185740, ts_idx: 3
+Topic: INFO Time: 011873 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000071380, ts_idx: 4
+Topic: INFO Time: 022284 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140001095f0, ts_idx: 5
+Topic: INFO Time: 022285 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140000716b0, ts_idx: 6
+Topic: INFO Time: 063122 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000292e70, ts_idx: 7
+Topic: INFO Time: 120201 File: coordinator.go Line: 163 Assign: ts_pointer: 0x140005c2630, ts_idx: 0
+Topic: INFO Time: 120202 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400059d350, ts_idx: 2
+Topic: INFO Time: 120203 File: coordinator.go Line: 163 Assign: ts_pointer: 0x1400056a870, ts_idx: 3
+Topic: INFO Time: 170203 File: coordinator.go Line: 163 Assign: ts_pointer: 0x14000292780, ts_idx: 7
+unexpected EOF
+unexpected EOF
+unexpected EOF
+--- crash test: PASS
+*** PASSED ALL TESTS
